@@ -1,0 +1,7 @@
+services:
+  quotaradar:
+    image: quotaradar-quotaradar:local
+    build: .
+  driver-assets:
+    image: quotaradar-quotaradar:local
+    pull_policy: never

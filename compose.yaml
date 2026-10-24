@@ -1,0 +1,65 @@
+name: quotaradar
+x-quotaradar-image: &quotaradar-image ${QUOTARADAR_IMAGE:-ghcr.io/liminalselves/quotaradar:latest}
+services:
+  quotaradar:
+    image: *quotaradar-image
+    restart: unless-stopped
+    init: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3210
+      QR_DATA_DIR: /app/data
+      QR_SNOWLUMA_API_URL: http://snowluma:5099/
+      QR_SNOWLUMA_DESKTOP_URL: http://snowluma:6081/
+      QR_MANAGED_SNOWLUMA: "1"
+      QR_ADMIN_PASSWORD: ${QR_ADMIN_PASSWORD:?Run node scripts/setup.mjs first}
+    ports:
+      - "${QR_BIND_ADDRESS:-127.0.0.1}:${QR_PORT:-3210}:3210"
+    volumes:
+      - radar-data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3210/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+  driver-assets:
+    profiles: [qq]
+    image: *quotaradar-image
+    user: "0:0"
+    command: [node, --experimental-strip-types, scripts/export-driver.ts, /driver-assets]
+    restart: "no"
+    volumes:
+      - qq-driver-assets:/driver-assets
+  snowluma:
+    profiles: [qq]
+    depends_on:
+      driver-assets:
+        condition: service_completed_successfully
+    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:v1.10.0}
+    command: [node, --experimental-strip-types, /opt/quotaradar/scripts/snowluma-start.ts]
+    restart: unless-stopped
+    init: true
+    shm_size: 1gb
+    cap_add: [SYS_PTRACE]
+    security_opt: [seccomp=unconfined]
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 1048576
+    environment:
+      QR_ADMIN_PASSWORD: ${QR_ADMIN_PASSWORD:?Run node scripts/setup.mjs first}
+      SNOWLUMA_WEBUI_HOST: 0.0.0.0
+      SNOWLUMA_WEBUI_PORT: 5099
+      SNOWLUMA_QQ_FLAGS: --disable-gpu --disable-software-rasterizer --disable-gpu-compositing
+    volumes:
+      - qq-driver-assets:/opt/quotaradar:ro
+      - qq-gateway-data:/app/snowluma-data
+      - qq-client-config:/app/.config
+      - qq-client-data:/app/.local/share
+volumes:
+  qq-driver-assets:
+  radar-data:
+  qq-gateway-data:
+  qq-client-config:
+  qq-client-data:
