@@ -109,7 +109,7 @@ export function SettingsForm({ settings, save }: { settings: Settings; save: (in
     <Field label="自动刷新间隔（分钟）"><input type="number" min={1} max={1440} required value={value.refreshMinutes} onChange={e => patch({ refreshMinutes: Number(e.target.value) })} /></Field>
     <Field label="默认低额度阈值" hint="按每个 Key 的显示单位比较，可在 Key 中覆盖。"><input required value={value.defaultThreshold} onChange={e => patch({ defaultThreshold: e.target.value })} /></Field>
     <Field label="连续失败多少次后提醒"><input type="number" min={1} max={20} required value={value.failureThreshold} onChange={e => patch({ failureThreshold: Number(e.target.value) })} /></Field>
-    <Field label="同一问题重复提醒间隔（小时）"><input type="number" min={1} max={168} required value={value.reminderHours} onChange={e => patch({ reminderHours: Number(e.target.value) })} /></Field>
+    <Field label="异常重复提醒间隔（小时）" hint="低额度只提醒一次，额度恢复后再次跌破阈值才提醒；此间隔仅用于查询失败、凭据无效、停用和过期。"><input type="number" min={1} max={168} required value={value.reminderHours} onChange={e => patch({ reminderHours: Number(e.target.value) })} /></Field>
     <Field label="采样历史保留（天）"><input type="number" min={1} max={3650} required value={value.snapshotDays} onChange={e => patch({ snapshotDays: Number(e.target.value) })} /></Field>
     <Field label="查询与通知记录保留（天）"><input type="number" min={1} max={365} required value={value.taskDays} onChange={e => patch({ taskDays: Number(e.target.value) })} /></Field>
     <Field label="日报时间"><input type="time" required value={value.dailyTime} onChange={e => patch({ dailyTime: e.target.value })} /></Field>

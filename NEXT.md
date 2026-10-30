@@ -1,6 +1,6 @@
 # 当前进度
 
-更新：2026-10-24。主服务、统一 QQ 管理和真实桌面连接已完成本地验收。当前交付新增 GitHub CI 镜像发布与服务器免源码部署；用户指定的首次发布目标为 [liminalselves/QuotaRadar](https://github.com/liminalselves/QuotaRadar)。
+更新：2026-10-30。主服务、统一 QQ 管理和真实桌面连接已完成本地验收；本次修复定时播报重复和低额度预警反复提醒。当前交付新增 GitHub CI 镜像发布与服务器免源码部署；用户指定的首次发布目标为 [liminalselves/QuotaRadar](https://github.com/liminalselves/QuotaRadar)。
 
 范围与认证设计见 [设计说明](docs/design.md)，操作见 [README](README.md)，验收条件见 [实施说明](docs/implementation.md)。
 
@@ -14,7 +14,7 @@
 
 | 检查 | 结果 |
 | --- | --- |
-| `npm run check` | 通过：35 项核心测试、16 项集成测试、类型检查和生产构建 |
+| `npm run check` | 通过：41 项核心测试、20 项集成测试、类型检查和生产构建；新增低额度状态、长播报分段、QQ/TG 结果未确认和限流回归 |
 | 启动资源独立性 | 新增回归在临时目录导出资源后独立初始化认证，不依赖仓库路径 |
 | 正式镜像 | 本地镜像构建通过；使用 `npm ci` 与锁文件，运行镜像移除开发依赖并携带启动资源 |
 | 免源码部署 | 在只含 Compose 与合成 `.env` 的独立临时目录运行完整镜像栈；未构建、未挂载宿主源码，主服务 healthy，驱动自动认证成功，协议仍待用户确认 |

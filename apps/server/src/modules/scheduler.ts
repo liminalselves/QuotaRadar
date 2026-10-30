@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { NotificationEvent } from '../../../../packages/shared/types.ts';
 import { Store } from '../infrastructure/store.ts';
 import { RefreshService } from './refresh.ts';
-import { Commands } from './commands.ts';
+import { Commands, splitMessage } from './commands.ts';
 export interface DeliveryTarget { platform: 'qq' | 'telegram'; kind: 'private' | 'group'; id: string }
+export class DeliveryError extends Error {
+  retryable: boolean; retryAfterMs: number;
+  constructor(message: string, retryable: boolean, retryAfterMs = 0) { super(message); this.retryable = retryable; this.retryAfterMs = retryAfterMs; }
+}
 export class Scheduler {
   store: Store; refresh: RefreshService; commands: Commands;
   deliver: (target: DeliveryTarget, text: string) => Promise<void>;
@@ -48,21 +51,31 @@ export class Scheduler {
     const settings = this.store.settings();
     for (const key of this.store.views()) {
       if (!key.enabled || !this.store.provider(key.providerId)?.enabled) continue;
-      const q = key.latest, now = Date.now();
-      const failures = this.store.tasks(key.id).filter(t => t.state !== 'cancelled' && t.keyRevision === key.revision && t.providerVersion === this.store.provider(key.providerId)?.version);
+      const q = key.latest, now = Date.now(), provider = this.store.provider(key.providerId)!;
+      const failures = this.store.tasks(key.id).filter(t => ['success', 'failed'].includes(t.state) && t.keyRevision === key.revision && t.providerVersion === provider.version);
       let consecutive = 0;
       for (const task of failures) { if (task.state !== 'failed') break; consecutive++; }
-      const state = key.lastTask?.errorKind === 'unauthorized' && key.lastTask.state === 'failed' ? 'unauthorized'
+      const state = failures[0]?.errorKind === 'unauthorized' && failures[0].state === 'failed' ? 'unauthorized'
         : q?.active === false ? 'disabled'
         : q?.expiresAt !== null && q?.expiresAt !== undefined && q.expiresAt * 1000 < now ? 'expired'
         : consecutive >= settings.failureThreshold ? 'failure'
         : key.low && !key.stale ? 'low' : 'normal';
       const id = `alert:${key.id}`;
-      const old = this.store.getValue(id, { state: 'normal', at: 0 });
-      if (state === 'normal') { if (old.state !== state) this.store.setValue(id, { state, at: now }); continue; }
-      if (state !== old.state || now - old.at >= settings.reminderHours * 3600000) {
+      const saved = this.store.getValue<{ state: string; at: number; low?: boolean; revision?: number; providerVersion?: number }>(id, { state: 'normal', at: 0 });
+      const old = saved.revision !== undefined && (saved.revision !== key.revision || saved.providerVersion !== provider.version) ? { state: 'normal', at: 0, low: false } : saved;
+      let low = old.low ?? old.state === 'low';
+      if (state === 'normal') {
+        if (!q || key.stale || (!q.unlimited && q.remaining === null) || failures[0]?.state === 'failed') continue;
+        low = false;
+      }
+      const notify = state !== 'normal' && (state === 'low' ? !low : state !== old.state || now - old.at >= settings.reminderHours * 3600000);
+      if (notify) {
         const labels: Record<string, string> = { unauthorized: '凭据无效或无查询权限', disabled: '令牌已停用', expired: '令牌已过期', failure: `连续 ${consecutive} 次查询失败`, low: '低额度提醒' };
-        this.event(key.id, state, `${labels[state]}\n${this.commands.line(key)}`); this.store.setValue(id, { state, at: now });
+        this.event(key.id, state, `${labels[state]}\n${this.commands.line(key)}`);
+      }
+      low ||= state === 'low';
+      if (notify || state !== old.state || low !== saved.low || saved.revision !== key.revision || saved.providerVersion !== provider.version) {
+        this.store.setValue(id, { state, at: notify ? now : old.at, low, revision: key.revision, providerVersion: provider.version });
       }
     }
   }
@@ -75,15 +88,31 @@ export class Scheduler {
       if (Date.parse(event.nextAt) > Date.now()) continue;
       if (!targets.length || (event.keyId && !this.store.key(event.keyId))) { this.store.saveNotification({ ...event, state: 'skipped' }); continue; }
       const delivered = this.store.getValue<string[]>(`delivered:${event.id}`, []);
-      let failed = false;
+      const parts = splitMessage(event.text), visited = new Set<string>();
+      let failed = false, retry = false, retryAfterMs = 0;
       for (const target of targets) {
         const id = `${target.platform}:${target.kind}:${target.id}`;
+        if (visited.has(id)) continue;
+        visited.add(id);
+        if (delivered.includes(`failed:${id}`)) { failed = true; continue; }
         if (delivered.includes(id)) continue;
-        try { await this.deliver(target, event.text); delivered.push(id); this.store.setValue(`delivered:${event.id}`, delivered); }
-        catch { failed = true; }
+        try {
+          for (const [index, part] of parts.entries()) {
+            const partId = `${id}:${index}`;
+            if (delivered.includes(partId)) continue;
+            await this.deliver(target, part);
+            delivered.push(partId); this.store.setValue(`delivered:${event.id}`, delivered);
+          }
+          delivered.push(id); this.store.setValue(`delivered:${event.id}`, delivered);
+        } catch (error) {
+          failed = true;
+          if (error instanceof DeliveryError && !error.retryable) delivered.push(`failed:${id}`);
+          else { retry = true; retryAfterMs = Math.max(retryAfterMs, error instanceof DeliveryError ? error.retryAfterMs : 0); }
+          this.store.setValue(`delivered:${event.id}`, delivered);
+        }
       }
       const attempts = event.attempts + 1;
-      this.store.saveNotification({ ...event, attempts, state: failed ? (attempts >= 3 ? 'failed' : 'pending') : 'sent', nextAt: new Date(Date.now() + 60000 * attempts).toISOString() });
+      this.store.saveNotification({ ...event, attempts, state: failed ? (retry && attempts < 3 ? 'pending' : 'failed') : 'sent', nextAt: new Date(Date.now() + Math.max(retryAfterMs, 60000 * attempts)).toISOString() });
     }
   }
 }

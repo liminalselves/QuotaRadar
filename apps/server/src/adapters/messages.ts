@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { ChannelStatus } from '../../../../packages/shared/types.ts';
 import { Store } from '../infrastructure/store.ts';
 import { Commands, splitMessage } from '../modules/commands.ts';
-import type { DeliveryTarget } from '../modules/scheduler.ts';
+import { DeliveryError, type DeliveryTarget } from '../modules/scheduler.ts';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export class MessagePlatforms {
   store: Store; commands: Commands;
@@ -83,7 +83,7 @@ export class MessagePlatforms {
       try { event = JSON.parse(raw.toString()); } catch { return; }
       if (event.echo && this.replies.has(String(event.echo))) {
         const pending = this.replies.get(String(event.echo))!; clearTimeout(pending.timer); this.replies.delete(String(event.echo));
-        if (event.retcode === 0) pending.resolve(event.data); else pending.reject(new Error('QQ 驱动拒绝操作'));
+        if (event.retcode === 0) pending.resolve(event.data); else pending.reject(new DeliveryError('QQ 驱动拒绝操作', event.status === 'failed'));
         return;
       }
       if (event.post_type === 'meta_event' && event.meta_event_type === 'heartbeat') {
@@ -110,12 +110,12 @@ export class MessagePlatforms {
     });
   }
   action(action: string, params: object): Promise<unknown> {
-    if (this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('QQ 驱动尚未连接'));
+    if (this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new DeliveryError('QQ 驱动尚未连接', true));
     const echo = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.replies.delete(echo); reject(new Error('QQ 操作超时')); }, 10000);
+      const timer = setTimeout(() => { this.replies.delete(echo); reject(new DeliveryError('QQ 操作超时，结果未确认', false)); }, 10000);
       this.replies.set(echo, { resolve, reject, timer });
-      this.socket!.send(JSON.stringify({ action, params, echo }), error => { if (error) { clearTimeout(timer); this.replies.delete(echo); reject(new Error('QQ 发送失败')); } });
+      this.socket!.send(JSON.stringify({ action, params, echo }), error => { if (error) { clearTimeout(timer); this.replies.delete(echo); reject(new DeliveryError('QQ 发送中断，结果未确认', false)); } });
     });
   }
   send(target: DeliveryTarget, text: string): Promise<void> {
@@ -132,12 +132,11 @@ export class MessagePlatforms {
             [target.kind === 'group' ? 'group_id' : 'user_id']: id, message: [{ type: 'text', data: { text: part } }],
           });
         } else {
-          if (!this.bot || !this.store.channel('telegram').enabled) throw new Error('Telegram 未启用');
+          if (!this.bot || !this.store.channel('telegram').enabled) throw new DeliveryError('Telegram 未启用', true);
           try { await this.bot.api.sendMessage(target.id, part); }
           catch (error) {
-            if (error instanceof GrammyError && error.error_code === 429 && error.parameters.retry_after) {
-              await sleep(error.parameters.retry_after * 1000); await this.bot.api.sendMessage(target.id, part);
-            } else throw new Error('Telegram 消息发送失败');
+            const retryAfterMs = error instanceof GrammyError && error.error_code === 429 ? (error.parameters.retry_after ?? 60) * 1000 : 0;
+            throw new DeliveryError('Telegram 消息发送失败', retryAfterMs > 0, retryAfterMs);
           }
         }
         this.lastSend.set(queueId, Date.now());
@@ -148,7 +147,7 @@ export class MessagePlatforms {
     return result;
   }
   rejectPending(): void {
-    for (const pending of this.replies.values()) { clearTimeout(pending.timer); pending.reject(new Error('QQ 连接已关闭')); }
+    for (const pending of this.replies.values()) { clearTimeout(pending.timer); pending.reject(new DeliveryError('QQ 连接已关闭，结果未确认', false)); }
     this.replies.clear();
   }
   async stop(): Promise<void> {
