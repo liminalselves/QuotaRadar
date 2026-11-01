@@ -36,7 +36,7 @@ services:
     depends_on:
       driver-assets:
         condition: service_completed_successfully
-    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:v1.10.0}
+    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:v2.3.2}
     command: [node, --experimental-strip-types, /opt/quotaradar/scripts/snowluma-start.ts]
     restart: unless-stopped
     init: true
@@ -54,7 +54,7 @@ services:
       SNOWLUMA_QQ_FLAGS: --disable-gpu --disable-software-rasterizer --disable-gpu-compositing
     volumes:
       - qq-driver-assets:/opt/quotaradar:ro
-      - qq-gateway-data:/app/snowluma-data
+      - qq-gateway-data:/app/data
       - qq-client-config:/app/.config
       - qq-client-data:/app/.local/share
 volumes:

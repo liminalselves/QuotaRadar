@@ -22,11 +22,11 @@
 
 Linux Docker Compose 为主要交付。主服务由 GitHub CI 检查后构建 AMD64 / ARM64 镜像并发布到 GHCR，`compose.yaml` 用于直接拉镜像，源码构建通过 `compose.build.yaml` 覆盖。一次性资源初始化服务从主服务镜像导出驱动启动文件，供 SnowLuma 只读挂载，服务器无需源码目录。镜像标签和拉取权限的操作说明见 README。
 
-SnowLuma 为可选的独立官方服务，固定 v1.10.0，不复制其原生插件、不维护修改版驱动；业务、QQ 数据卷与可再生的启动资源卷分开。
+SnowLuma 为可选的独立官方服务，固定 v2.3.2，不复制其原生插件、不维护修改版驱动；业务、QQ 数据卷与可再生的启动资源卷分开。
 
 日常只有 QuotaRadar 一个前端。消息平台内切换 QQ / Telegram；协议原文确认、账号/进程、OneBot 同步和日志使用原生组件。协议仍须用户明确确认，保存连接参数不会启用 Bot，也不代表账号在线。
 
-项目自带 Compose 只保留 QuotaRadar 认证边界。由管理员密码经用途隔离的 HMAC 派生内部驱动和桌面凭据，而不是让三个服务复用同一个明文密码。驱动启动包装器按固定 v1.10.0 的 `webui.json` 格式写入 scrypt 哈希，不修改协议确认或 QQ 登录数据；管理会话只保留在后端内存，与 OneBot token 分开。网页不能改写受管驱动地址或密码。本机接外部驱动是独立部署方式，仍支持手动认证。
+项目自带 Compose 只保留 QuotaRadar 认证边界。由管理员密码经用途隔离的 HMAC 派生内部驱动和桌面凭据，而不是让三个服务复用同一个明文密码。驱动启动包装器按固定 v2.3.2 的 `webui.json` 严格格式（只含五个字段，含未知字段或时间戳无效会被上游视为损坏并改成随机密码）写入 scrypt 哈希，不修改协议确认或 QQ 登录数据；管理会话只保留在后端内存，与 OneBot token 分开。网页不能改写受管驱动地址或密码。本机接外部驱动是独立部署方式，仍支持手动认证。
 
 传统 VNC 只能使用 8 字节密码，所以内部使用单独派生的 8 字节凭据，不降低管理员密码长度。后端代理完成 RFB 3.8 的 VNC challenge-response，浏览器通过 QuotaRadar 管理会话进入桌面，不接收内部密码，也不将密码放入 URL。该浏览器侧免二次认证只存在于已通过管理员鉴权的 WebSocket，认证失败即关闭，不回退。驱动原始管理、桌面与 OneBot 端口均不映射到宿主机。管理员密码变化会轮换内部凭据并使旧网页登录会话失效；操作步骤见 README。
 
@@ -43,7 +43,7 @@ Windows 可运行主服务开发；Windows 原生 QQ 托管不在本版。
 - https://snowluma.github.io/zh/docs/guide/deploy/docker
 - https://snowluma.github.io/zh/docs/guide/configuration
 - https://snowluma.github.io/zh/docs/api
-- 固定版本管理协议：[server.ts](https://github.com/SnowLuma/SnowLuma/blob/v1.10.0/packages/core/src/webui/server.ts)、[auth.ts](https://github.com/SnowLuma/SnowLuma/blob/v1.10.0/packages/core/src/webui/auth.ts)、[consent.ts](https://github.com/SnowLuma/SnowLuma/blob/v1.10.0/packages/core/src/webui/consent.ts)、[types.ts](https://github.com/SnowLuma/SnowLuma/blob/v1.10.0/packages/webui/src/types.ts)。适配以该标签为准，不套用 main 的新版认证接口。
+- 固定版本管理协议：[server.ts](https://github.com/SnowLuma/SnowLuma/blob/v2.3.2/packages/core/src/webui/server.ts)、[auth.ts](https://github.com/SnowLuma/SnowLuma/blob/v2.3.2/packages/core/src/webui/auth.ts)、[consent.ts](https://github.com/SnowLuma/SnowLuma/blob/v2.3.2/packages/core/src/webui/consent.ts)、[types.ts](https://github.com/SnowLuma/SnowLuma/blob/v2.3.2/packages/webui/src/types.ts)。适配以该标签为准，不套用 main 的新版认证接口。镜像启动脚本见 [SnowLuma.Docker.Framework start.sh](https://github.com/SnowLuma/SnowLuma.Docker.Framework/blob/main/start.sh)。v1.10.0 在 vps 上向 QQ 服务器发出的请求全部收不到回执，因此于 2026-11-01 升级。
 - https://github.com/SnowLuma/SnowLuma/blob/main/LICENSE
 - https://github.com/QuantumNous/new-api/blob/main/controller/token.go
 - https://core.telegram.org/bots/api

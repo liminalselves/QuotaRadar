@@ -6,7 +6,7 @@ export function setup() {
   const target = fileURLToPath(new URL('../.env', import.meta.url));
   if (existsSync(target)) { console.log('保留已有 .env，不覆盖配置。'); return target; }
   const password = randomBytes(18).toString('base64url');
-  writeFileSync(target, `QR_ADMIN_PASSWORD=${password}\nQR_BIND_ADDRESS=127.0.0.1\nQR_PORT=3210\nSNOWLUMA_IMAGE=motricseven7/snowluma:v1.10.0\n`, { flag: 'wx', mode: 0o600 });
+  writeFileSync(target, `QR_ADMIN_PASSWORD=${password}\nQR_BIND_ADDRESS=127.0.0.1\nQR_PORT=3210\nSNOWLUMA_IMAGE=motricseven7/snowluma:v2.3.2\n`, { flag: 'wx', mode: 0o600 });
   console.log('已生成 .env，管理密码保存在 QR_ADMIN_PASSWORD。请用编辑器查看该文件。');
   return target;
 }

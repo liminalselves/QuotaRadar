@@ -27,13 +27,14 @@ test('驱动启动：认证格式符合固定版本，保留协议和运行配�
   const config = join(directory, 'config'); mkdirSync(config);
   const runtime = '{"webuiPort":5099,"preserve":true}\n', consent = '{"accepted":false}\n';
   writeFileSync(join(config, 'runtime.json'), runtime); writeFileSync(join(config, 'agreements.json'), consent);
-  writeFileSync(join(config, 'webui.json'), JSON.stringify({ generatedAt: 'fixture-date', custom: 'keep', mustChangePassword: true }));
+  writeFileSync(join(config, 'webui.json'), JSON.stringify({ generatedAt: '2026-10-25T09:46:51.000Z', custom: 'drop', mustChangePassword: true }));
   try {
     const first = prepareSnowLuma(directory, 'fixture-admin-one');
     const file = join(config, 'webui.json'), raw = readFileSync(file, 'utf8'), auth = JSON.parse(raw);
     const hash = scryptSync(first.managementPassword, Buffer.from(auth.passwordSalt, 'hex'), 64, { N: 16384, r: 8, p: 1 }).toString('hex');
     assert.equal(auth.passwordHash, hash); assert.equal(auth.mustChangePassword, false);
-    assert.equal(auth.custom, 'keep'); assert.equal(auth.generatedAt, 'fixture-date');
+    assert.deepEqual(Object.keys(auth).sort(), ['generatedAt', 'mustChangePassword', 'passwordHash', 'passwordSalt', 'updatedAt']);
+    assert.match(auth.passwordHash, /^[0-9a-f]{128}$/); assert.match(auth.passwordSalt, /^[0-9a-f]{32}$/); assert.equal(auth.generatedAt, '2026-10-25T09:46:51.000Z');
     for (const secret of ['fixture-admin-one', first.managementPassword, first.desktopPassword]) assert.equal(raw.includes(secret), false);
     assert.equal(readFileSync(join(config, 'runtime.json'), 'utf8'), runtime);
     assert.equal(readFileSync(join(config, 'agreements.json'), 'utf8'), consent);
