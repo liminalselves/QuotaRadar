@@ -42,7 +42,10 @@ export class Store {
   saveProvider(input: ProviderInput, id?: string): Provider {
     const old = id ? this.provider(id) : null;
     if (id && !old) throw new Error('供应商不存在');
-    const item: Provider = { ...input, id: id ?? randomUUID(), version: (old?.version ?? 0) + 1, createdAt: old?.createdAt ?? stamp() };
+    // Only fields that change query semantics start a new version; renaming, toggling or timeouts keep history continuous.
+    const semantic = (p: ProviderInput) => JSON.stringify([p.baseUrl, p.adapter, p.unit, p.unitsPerDollar, p.windowDays, p.billingWindowConfirmed, p.scope, p.paths, p.headers]);
+    const version = old ? old.version + (semantic(old) === semantic(input) ? 0 : 1) : 1;
+    const item: Provider = { ...input, id: id ?? randomUUID(), version, createdAt: old?.createdAt ?? stamp() };
     this.db.prepare('INSERT INTO providers VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body').run(item.id, JSON.stringify(item));
     return item;
   }
@@ -69,7 +72,7 @@ export class Store {
     if (!secret) throw new Error('请输入 Key');
     if (this.hasSecret(input.providerId, secret, id)) throw new Error('该供应商已经有相同 Key');
     const { secret: _, ...safe } = input;
-    const changed = Boolean(old && (secret !== this.secret(old.id) || old.providerId !== input.providerId || old.enabled !== input.enabled));
+    const changed = Boolean(old && (secret !== this.secret(old.id) || old.providerId !== input.providerId));
     const item: ApiKey = { ...safe, id: id ?? randomUUID(), revision: old ? old.revision + (changed ? 1 : 0) : 1,
       mask: mask(secret), createdAt: old?.createdAt ?? stamp() };
     this.db.prepare(`INSERT INTO api_keys VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET

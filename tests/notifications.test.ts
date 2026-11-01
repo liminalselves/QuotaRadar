@@ -119,3 +119,31 @@ test('播报发送跨过多次调度时只生成一份日报，每个目标只�
     assert.equal(calls, 1);
   } finally { await c.close(); }
 });
+
+test('/refresh 回复确认超时也会返回查询结果', async () => {
+  const c = context(); const replies: string[] = [];
+  try {
+    c.store.saveChannel({ ...channelDefaults('qq'), enabled: true, allowedUsers: ['9'], targets: [] });
+    let first = true;
+    await c.commands.handle({ platform: 'qq', userId: '9', text: '/refresh' }, async text => {
+      replies.push(text);
+      if (first) { first = false; throw new DeliveryError('QQ 已提交，但 QQ 服务器未确认送达', false, 0, true); }
+    });
+    assert.equal(replies.length, 2); assert.match(replies[1], /剩余：\$5\.00/);
+  } finally { await c.close(); }
+});
+
+test('未确认送达不重发、不算失败，其他目标照常发送', async () => {
+  const sent: string[] = [];
+  const c = context(async target => {
+    if (target.id === '1') throw new DeliveryError('QQ 已提交，但 QQ 服务器未确认送达', false, 0, true);
+    sent.push(target.id);
+  });
+  try {
+    c.store.saveChannel({ ...channelDefaults('qq'), enabled: true, targets: [{ kind: 'private', id: '1' }, { kind: 'group', id: '2' }, { kind: 'group', id: '3' }] });
+    c.scheduler.event(null, 'daily', 'hello'); await c.scheduler.flush();
+    assert.deepEqual(sent, ['2', '3']); assert.equal(c.store.notifications()[0].state, 'unconfirmed');
+    c.store.saveNotification({ ...c.store.notifications()[0], state: 'pending', nextAt: new Date(0).toISOString() }); await c.scheduler.flush();
+    assert.deepEqual(sent, ['2', '3']);
+  } finally { await c.close(); }
+});

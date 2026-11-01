@@ -29,6 +29,9 @@ console.log(`QuotaRadar 已启动：http://${host === '0.0.0.0' ? 'localhost' : 
 let closing = false;
 async function close(): Promise<void> {
   if (closing) return; closing = true;
-  await scheduler.stop(); await platforms.stop(); await refresh.close(); await app.close(); store.close();
+  // Lingering upstream sockets must not keep a container in "stopping" until Docker kills it.
+  setTimeout(() => process.exit(0), 10000).unref();
+  try { await scheduler.stop(); await platforms.stop(); await refresh.close(); await app.close(); store.close(); }
+  finally { process.exit(0); }
 }
 process.on('SIGINT', () => void close()); process.on('SIGTERM', () => void close());

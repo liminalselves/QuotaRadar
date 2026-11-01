@@ -296,3 +296,27 @@ test('日报每天仅生成一次，使用设置的时区和持久状态', async
     assert.equal(store.notifications().filter(n => n.kind === 'daily').length, 1);
   } finally { await refresh.close(); store.close(); }
 });
+test('改名、启停和超时不切分历史，口径字段变化才切分', () => {
+  const { store, p, key, keyInput } = context();
+  try {
+    store.saveSnapshot(key, p, quota('10'));
+    const renamed = store.saveProvider({ ...p, name: '新名称', enabled: false, timeoutMs: 20000 }, p.id); assert.equal(renamed.version, p.version);
+    const toggled = store.saveKey({ ...keyInput, enabled: false }, key.id); assert.equal(toggled.revision, key.revision);
+    store.saveKey({ ...keyInput, enabled: true }, key.id); assert.notEqual(store.views()[0].latest, null);
+    assert.equal(store.saveProvider({ ...p, unitsPerDollar: '1000' }, p.id).version, p.version + 1); assert.equal(store.views()[0].latest, null);
+  } finally { store.close(); }
+});
+test('接口返回的浮点小数按 12 位小数取整，不因二进制尾数报错', async () => {
+  const q = await queryQuota({ ...provider(), unitsPerDollar: '1' }, secret, async () => json({ success: true, data: { quota: { total_granted: 0.1 + 0.2, total_used: 1e-7, total_available: 0.3 } } }));
+  assert.equal(q.total, '0.3'); assert.equal(q.used, '0.0000001');
+});
+test('Bot 时间按设置时区显示，不输出 ISO 原文', () => {
+  const { store, p, key } = context();
+  try {
+    store.setValue('settings', { ...defaultSettings, timezone: 'Asia/Shanghai' });
+    const snapshot = store.saveSnapshot(key, p, quota('10'));
+    const commands = new Commands(store, new RefreshService(store, async () => quota()));
+    const text = commands.line(store.views()[0]);
+    assert.equal(text.includes(snapshot.sampledAt), false); assert.match(text, /更新：\d{4}-\d{2}-\d{2} \d{2}:\d{2}/); assert.match(text, /总 \$100\.00/);
+  } finally { store.close(); }
+});

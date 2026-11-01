@@ -19,7 +19,8 @@ function amount(value: unknown): string | null {
   if (typeof value === 'number' && (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value)))) {
     throw new QuotaError('format', '接口数值超出安全精度，请让接口返回十进制字符串');
   }
-  try { return decimal(value); } catch { throw new QuotaError('format', '接口额度精度或格式不受支持'); }
+  // Non-integer JSON numbers are already binary floats (e.g. 0.30000000000000004 or 1e-7); round them to the 12-digit scale.
+  try { return decimal(typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(12) : value); } catch { throw new QuotaError('format', '接口额度精度或格式不受支持'); }
 }
 function boolean(value: unknown): boolean | null {
   if (value === undefined || value === null) return null;

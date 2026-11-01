@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { ChannelStatus } from '../../../../packages/shared/types.ts';
 import { Store } from '../infrastructure/store.ts';
 import { Commands, splitMessage } from '../modules/commands.ts';
-import { DeliveryError, type DeliveryTarget } from '../modules/scheduler.ts';
+import { DeliveryError, type DeliveryTarget } from '../modules/delivery.ts';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export class MessagePlatforms {
   store: Store; commands: Commands;
@@ -30,6 +30,7 @@ export class MessagePlatforms {
       const token = this.store.channelToken('telegram');
       this.bot = new Bot(token, { client: { timeoutSeconds: 35 } });
       this.bot.on('message:text', async context => {
+        if (!context.from) return;
         await this.commands.handle({ platform: 'telegram', text: context.message.text, userId: String(context.from.id),
           groupId: context.chat.type === 'private' ? undefined : String(context.chat.id), botUsername: context.me.username },
         text => this.send({ platform: 'telegram', kind: context.chat.type === 'private' ? 'private' : 'group', id: String(context.chat.id) }, text));
@@ -51,7 +52,10 @@ export class MessagePlatforms {
         this.status.telegram = { connected: true, accountOnline: true, error: null };
         for (const update of updates) {
           if (signal.aborted || version !== this.generation) break;
-          await bot.handleUpdate(update); this.store.setValue('telegramOffset', update.update_id + 1);
+          // A failed reply must not block the offset, otherwise the same update is retried and answered forever.
+          try { await bot.handleUpdate(update); }
+          catch { this.status.telegram.error = 'Telegram 消息处理或回复失败'; }
+          this.store.setValue('telegramOffset', update.update_id + 1);
         }
       } catch (error) {
         if (signal.aborted || version !== this.generation) break;
@@ -83,7 +87,10 @@ export class MessagePlatforms {
       try { event = JSON.parse(raw.toString()); } catch { return; }
       if (event.echo && this.replies.has(String(event.echo))) {
         const pending = this.replies.get(String(event.echo))!; clearTimeout(pending.timer); this.replies.delete(String(event.echo));
-        if (event.retcode === 0) pending.resolve(event.data); else pending.reject(new DeliveryError('QQ 驱动拒绝操作', event.status === 'failed'));
+        // SnowLuma reports a QQ-side ack timeout as a failure although the message usually arrives; treat it as unconfirmed.
+        if (event.retcode === 0) pending.resolve(event.data);
+        else if (/timed out/i.test(String(event.wording ?? event.message ?? ''))) pending.reject(new DeliveryError('QQ 已提交，但 QQ 服务器未确认送达', false, 0, true));
+        else pending.reject(new DeliveryError(`QQ 驱动拒绝发送${event.wording ? `：${String(event.wording).slice(0, 120)}` : ''}`, event.status === 'failed'));
         return;
       }
       if (event.post_type === 'meta_event' && event.meta_event_type === 'heartbeat') {
@@ -113,9 +120,10 @@ export class MessagePlatforms {
     if (this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new DeliveryError('QQ 驱动尚未连接', true));
     const echo = randomUUID();
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.replies.delete(echo); reject(new DeliveryError('QQ 操作超时，结果未确认', false)); }, 10000);
+      // Longer than SnowLuma's own 15 s packet timeout, so its explicit result wins over a local guess.
+      const timer = setTimeout(() => { this.replies.delete(echo); reject(new DeliveryError('QQ 操作超时，结果未确认', false, 0, true)); }, 25000);
       this.replies.set(echo, { resolve, reject, timer });
-      this.socket!.send(JSON.stringify({ action, params, echo }), error => { if (error) { clearTimeout(timer); this.replies.delete(echo); reject(new DeliveryError('QQ 发送中断，结果未确认', false)); } });
+      this.socket!.send(JSON.stringify({ action, params, echo }), error => { if (error) { clearTimeout(timer); this.replies.delete(echo); reject(new DeliveryError('QQ 发送中断，结果未确认', false, 0, true)); } });
     });
   }
   send(target: DeliveryTarget, text: string): Promise<void> {
@@ -147,7 +155,7 @@ export class MessagePlatforms {
     return result;
   }
   rejectPending(): void {
-    for (const pending of this.replies.values()) { clearTimeout(pending.timer); pending.reject(new DeliveryError('QQ 连接已关闭，结果未确认', false)); }
+    for (const pending of this.replies.values()) { clearTimeout(pending.timer); pending.reject(new DeliveryError('QQ 连接已关闭，结果未确认', false, 0, true)); }
     this.replies.clear();
   }
   async stop(): Promise<void> {

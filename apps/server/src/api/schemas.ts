@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { compare } from '../../../../packages/shared/amount.ts';
-const amount = z.string().regex(/^\d+(\.\d{1,12})?$/).max(60);
+z.config(z.locales.zhCN());
+export const fieldLabels: Record<string, string> = {
+  name: '名称', baseUrl: '站点 URL', adapter: '查询类型', unit: '显示单位', unitsPerDollar: '单位换算', timeoutMs: '请求超时', windowDays: '查询窗口',
+  paths: '查询路径', headers: '附加请求头', providerId: '所属供应商', secret: 'API Key', tags: '标签', threshold: '低额度阈值', balanceGroup: '共享余额组',
+  refreshMinutes: '自动刷新间隔', defaultThreshold: '默认低额度阈值', failureThreshold: '失败提醒次数', reminderHours: '重复提醒间隔',
+  snapshotDays: '采样历史保留', taskDays: '记录保留', dailyTime: '日报时间', timezone: '时区', endpoint: '连接地址', token: 'token',
+  allowedUsers: '允许的个人 ID', allowedGroups: '允许的群 ID', targets: '通知目标', password: '口令', rows: '导入内容',
+};
+const amount = z.string().regex(/^\d+(\.\d{1,12})?$/, '请输入非负十进制数，最多 12 位小数').max(60);
 const positive = amount.refine(n => { try { return compare(n, '0') > 0; } catch { return false; } }, '必须大于 0');
 const url = z.string().url().refine(text => { const u = new URL(text); return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password && !u.search && !u.hash; }, '请输入无凭据、查询参数的 HTTP(S) 地址');
 const path = z.string().max(500).refine(p => p.startsWith('/') && !p.startsWith('//') && !p.includes('://') && !p.includes('#'), '请输入站点内以 / 开头的路径');

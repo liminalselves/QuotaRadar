@@ -52,7 +52,7 @@ export interface ChannelStatus {
 }
 export interface NotificationEvent {
   id: string; keyId: string | null; kind: string; text: string; createdAt: string;
-  state: 'pending' | 'sent' | 'failed' | 'skipped'; attempts: number; nextAt: string;
+  state: 'pending' | 'sent' | 'unconfirmed' | 'failed' | 'skipped'; attempts: number; nextAt: string;
 }
 export const adapterNames: Record<AdapterType, string> = {
   'openai-billing': 'OpenAI Billing', 'newapi-cx': 'New API · CX', 'newapi-usage': 'New API · Token Usage',

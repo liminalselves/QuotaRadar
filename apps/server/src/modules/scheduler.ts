@@ -2,11 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Store } from '../infrastructure/store.ts';
 import { RefreshService } from './refresh.ts';
 import { Commands, splitMessage } from './commands.ts';
-export interface DeliveryTarget { platform: 'qq' | 'telegram'; kind: 'private' | 'group'; id: string }
-export class DeliveryError extends Error {
-  retryable: boolean; retryAfterMs: number;
-  constructor(message: string, retryable: boolean, retryAfterMs = 0) { super(message); this.retryable = retryable; this.retryAfterMs = retryAfterMs; }
-}
+import { DeliveryError, type DeliveryTarget } from './delivery.ts';
+export { DeliveryError, type DeliveryTarget };
 export class Scheduler {
   store: Store; refresh: RefreshService; commands: Commands;
   deliver: (target: DeliveryTarget, text: string) => Promise<void>;
@@ -89,11 +86,12 @@ export class Scheduler {
       if (!targets.length || (event.keyId && !this.store.key(event.keyId))) { this.store.saveNotification({ ...event, state: 'skipped' }); continue; }
       const delivered = this.store.getValue<string[]>(`delivered:${event.id}`, []);
       const parts = splitMessage(event.text), visited = new Set<string>();
-      let failed = false, retry = false, retryAfterMs = 0;
+      let failed = false, retry = false, retryAfterMs = 0, unconfirmed = false;
       for (const target of targets) {
         const id = `${target.platform}:${target.kind}:${target.id}`;
         if (visited.has(id)) continue;
         visited.add(id);
+        if (delivered.includes(`unconfirmed:${id}`)) { unconfirmed = true; continue; }
         if (delivered.includes(`failed:${id}`)) { failed = true; continue; }
         if (delivered.includes(id)) continue;
         try {
@@ -105,6 +103,8 @@ export class Scheduler {
           }
           delivered.push(id); this.store.setValue(`delivered:${event.id}`, delivered);
         } catch (error) {
+          // An unconfirmed send was handed to the platform; never resend it, and do not report it as a failure.
+          if (error instanceof DeliveryError && error.unconfirmed) { unconfirmed = true; delivered.push(`unconfirmed:${id}`); this.store.setValue(`delivered:${event.id}`, delivered); continue; }
           failed = true;
           if (error instanceof DeliveryError && !error.retryable) delivered.push(`failed:${id}`);
           else { retry = true; retryAfterMs = Math.max(retryAfterMs, error instanceof DeliveryError ? error.retryAfterMs : 0); }
@@ -112,7 +112,7 @@ export class Scheduler {
         }
       }
       const attempts = event.attempts + 1;
-      this.store.saveNotification({ ...event, attempts, state: failed ? (retry && attempts < 3 ? 'pending' : 'failed') : 'sent', nextAt: new Date(Date.now() + Math.max(retryAfterMs, 60000 * attempts)).toISOString() });
+      this.store.saveNotification({ ...event, attempts, state: failed ? (retry && attempts < 3 ? 'pending' : 'failed') : unconfirmed ? 'unconfirmed' : 'sent', nextAt: new Date(Date.now() + Math.max(retryAfterMs, 60000 * attempts)).toISOString() });
     }
   }
 }

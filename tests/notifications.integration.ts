@@ -48,11 +48,11 @@ for (const mode of ['partial', 'unconfirmed'] as const) {
       c.scheduler.event(null, 'daily', mode === 'partial' ? ['a', 'b', 'c'].map(letter => letter.repeat(2000)).join('\n') : 'a single message');
       await c.scheduler.flush();
       const event = c.store.notifications()[0];
-      assert.equal(event.state, mode === 'partial' ? 'pending' : 'failed');
+      assert.equal(event.state, mode === 'partial' ? 'pending' : 'unconfirmed');
       c.store.saveNotification({ ...event, nextAt: new Date(0).toISOString() });
       await c.scheduler.flush();
       assert.deepEqual(calls, mode === 'partial' ? ['a', 'b', 'b', 'c'] : ['a']);
-      assert.equal(c.store.notifications()[0].state, mode === 'partial' ? 'sent' : 'failed');
+      assert.equal(c.store.notifications()[0].state, mode === 'partial' ? 'sent' : 'unconfirmed');
     } finally {
       await c.close(); for (const socket of server.clients) socket.terminate();
       await new Promise<void>(resolve => server.close(() => resolve()));
