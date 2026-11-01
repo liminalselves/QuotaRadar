@@ -8,7 +8,7 @@
 
 - 服务器镜像部署：Docker Engine / Docker Desktop 与 Docker Compose v2，不需要 Node.js、npm 或本地编译。
 - 源码开发：Node.js 22.13 或更新版本，附带 npm；需要 QQ 时再使用 Docker。
-- 主服务镜像提供 Linux AMD64 / ARM64；固定 SnowLuma v2.3.2 的官方镜像也提供这两个架构，但实际 QQ 功能验收以 [NEXT.md](NEXT.md) 为准。
+- 主服务镜像提供 Linux AMD64 / ARM64；固定 SnowLuma v2.2.1 的官方镜像也提供这两个架构，但实际 QQ 功能验收以 [NEXT.md](NEXT.md) 为准。
 
 ## 服务器直接部署镜像
 
@@ -114,7 +114,7 @@ Compose 使用 Docker 内网中的 `http://snowluma:5099/` 和 `http://snowluma:
 
 进程加载、状态刷新和按需日志位于高级设置，不负责 QQ 或容器启停。SnowLuma 仍为独立官方容器，不接入 Docker socket；5099、6081、5900、3000、3001 均不映射到宿主机，`QR_DRIVER_BIND_ADDRESS` 不再使用。不要再访问宿主机 6081 或 5099，统一通过 QuotaRadar。若需公网访问，只反向代理 QuotaRadar 的 HTTPS 入口，同时转发 HTTP 与 WebSocket。
 
-固定 v2.3.2 的驱动数据目录为 `/app/data`，对应 `qq-gateway-data` 卷；另外两个卷保存 QQ 客户端数据。项目启动包装器只接管认证配置，并预创建缺失的运行配置以避免上游首次启动权限问题；保留已有协议确认、运行设置和 QQ 数据。不需要 `chmod 777`，也不让驱动进程以 root 运行。从 v1.10.0 升级时卷名不变，只是挂载点从 `/app/snowluma-data` 改为 `/app/data`，执行 `docker compose --profile qq pull` 和 `up -d` 即可，原有协议确认和 QQ 登录数据会保留。
+固定 v2.2.1 的驱动数据目录为 `/app/data`，对应 `qq-gateway-data` 卷；另外两个卷保存 QQ 客户端数据。项目启动包装器只接管认证配置，并预创建缺失的运行配置以避免上游首次启动权限问题；保留已有协议确认、运行设置和 QQ 数据。不需要 `chmod 777`，也不让驱动进程以 root 运行。从 v1.10.0 升级时卷名不变，只是挂载点从 `/app/snowluma-data` 改为 `/app/data`，执行 `docker compose --profile qq pull` 和 `up -d` 即可，原有协议确认和 QQ 登录数据会保留。
 
 ### 修改统一管理密码
 

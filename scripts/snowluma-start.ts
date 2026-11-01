@@ -17,7 +17,7 @@ export function prepareSnowLuma(directory: string, adminPassword: string) {
     } catch { throw new Error('SnowLuma 管理配置无法解析，原文件未更改'); }
   }
   const salt = randomBytes(16), now = new Date().toISOString();
-  // v2.3.2 treats unknown keys or an invalid timestamp as corruption and rotates to a random password, so write its exact schema.
+  // v2.2.1 treats unknown keys or an invalid timestamp as corruption and rotates to a random password, so write its exact schema.
   const generatedAt = typeof previous.generatedAt === 'string' && Number.isFinite(Date.parse(previous.generatedAt)) ? previous.generatedAt : now;
   const auth = {
     passwordHash: scryptSync(credentials.managementPassword, salt, 64, { N: 16384, r: 8, p: 1 }).toString('hex'),

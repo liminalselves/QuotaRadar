@@ -36,7 +36,7 @@ services:
     depends_on:
       driver-assets:
         condition: service_completed_successfully
-    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:v2.3.2}
+    image: ${SNOWLUMA_IMAGE:-motricseven7/snowluma:v2.2.1}
     command: [node, --experimental-strip-types, /opt/quotaradar/scripts/snowluma-start.ts]
     restart: unless-stopped
     init: true

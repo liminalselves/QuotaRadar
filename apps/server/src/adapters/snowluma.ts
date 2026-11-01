@@ -99,7 +99,7 @@ export class SnowLuma {
     state.documents = Array.isArray(agreements.documents) ? agreements.documents.map((doc: Json) => ({ id: String(doc.id), title: String(doc.title || doc.id), text: String(doc.text || '') })) : [];
     if (state.consentRequired || state.mustChangePassword) return state;
     const [accounts, processes] = await Promise.all([this.request('qq-list'), this.request('processes')]);
-    if (!Array.isArray(accounts.list) || !Array.isArray(processes.list)) throw new DriverError('QQ 驱动账号响应不符合 v2.3.2 管理协议');
+    if (!Array.isArray(accounts.list) || !Array.isArray(processes.list)) throw new DriverError('QQ 驱动账号响应不符合 v2.2.1 管理协议');
     state.accounts = accounts.list.map((a: Json) => ({ uin: String(a.uin), nickname: String(a.nickname || a.uin) }));
     state.processes = processes.list.map((p: Json) => ({ pid: Number(p.pid), name: String(p.name || 'QQ'), uin: String(p.uin || ''), status: String(p.status || 'unknown'), connected: p.connected === true, loggedIn: p.loggedIn === true }));
     return state;
